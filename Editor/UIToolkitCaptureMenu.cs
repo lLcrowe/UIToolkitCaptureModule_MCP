@@ -72,6 +72,39 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             LogResult(result, "EditorWindow(Inspector)");
         }
 
+        [MenuItem("Tools/UI Toolkit Capture/Capture Unity Editor Main (PrintWindow)")]
+        public static void CaptureUnityMainPrintWindow()
+        {
+            // 0.4.0 — PrintWindow + EnumWindows로 Unity 메인 ContainerWindow 통째 캡처
+            var hwnd = OSScreenCapture.FindUnityEditorWindow();
+            if (hwnd == System.IntPtr.Zero)
+            {
+                Debug.LogError("[UIToolkitCapture] Unity Editor 메인 윈도우 HWND 미발견");
+                return;
+            }
+
+            var path = $"{OUTPUT_DIR}/UnityMain_PrintWindow_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
+            var tex = OSScreenCapture.CaptureWindowPrint(hwnd);
+            if (tex == null)
+            {
+                Debug.LogError("[UIToolkitCapture] PrintWindow 캡처 실패");
+                return;
+            }
+
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(path);
+                if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+                AssetDatabase.Refresh();
+                Debug.Log($"[UIToolkitCapture/UnityMain] 성공 → {path} ({tex.width}x{tex.height})");
+            }
+            finally
+            {
+                Object.DestroyImmediate(tex);
+            }
+        }
+
         private static void LogResult(CaptureResult result, string mode)
         {
             if (result.success)

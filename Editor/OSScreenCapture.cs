@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -25,6 +27,16 @@ namespace lLCroweTool.UIToolkitCapture.Editor
         [DllImport("gdi32.dll")] private static extern int GetDIBits(IntPtr hdc, IntPtr hbm, int start, int cLines, [Out] byte[] lpvBits, ref BITMAPINFO lpbi, int usage);
         [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        [DllImport("user32.dll")] private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        private const uint PW_RENDERFULLCONTENT = 0x00000002;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -104,6 +116,125 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             if (hwnd == IntPtr.Zero) return default;
             GetWindowRect(hwnd, out var rect);
             return rect;
+        }
+
+        /// <summary>
+        /// 0.4.0 — 현재 프로세스의 가시 윈도우 중 클래스명이 _Unity_로 시작하는 첫 윈도우 HWND.
+        /// EnumWindows + GetWindowThreadProcessId 매칭 + GetClassName 패턴.
+        /// 다중 ContainerWindow 환경에서는 _가장 큰 영역_ 또는 _첫 매칭_ 반환.
+        /// </summary>
+        public static IntPtr FindUnityEditorWindow()
+        {
+            int currentPid = System.Diagnostics.Process.GetCurrentProcess().Id;
+            IntPtr foundHwnd = IntPtr.Zero;
+            int foundArea = 0;
+
+            EnumWindows((hwnd, lParam) =>
+            {
+                if (!IsWindowVisible(hwnd)) return true;
+
+                GetWindowThreadProcessId(hwnd, out int pid);
+                if (pid != currentPid) return true;
+
+                var sb = new StringBuilder(256);
+                GetClassName(hwnd, sb, sb.Capacity);
+                var className = sb.ToString();
+
+                // Unity Editor ContainerWindow는 _Unity_ 또는 _UnityWndClass_ 같은 클래스명
+                if (!className.StartsWith("Unity", StringComparison.OrdinalIgnoreCase)) return true;
+
+                GetWindowRect(hwnd, out var rect);
+                int area = rect.Width * rect.Height;
+                if (area > foundArea)
+                {
+                    foundArea = area;
+                    foundHwnd = hwnd;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            return foundHwnd;
+        }
+
+        /// <summary>
+        /// 0.4.0 — PrintWindow API로 윈도우 자체 내용 캡처. BitBlt와 달리 _가려진 윈도우_도 캡처 가능.
+        /// hwnd가 가리키는 윈도우 영역을 PNG로 저장.
+        /// 단 Unity 6.3 EditorWindow는 child window라 자기 HWND 없을 수 있음 — 메인 ContainerWindow 캡처 후 crop 권장.
+        /// </summary>
+        public static Texture2D CaptureWindowPrint(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return null;
+
+            GetWindowRect(hwnd, out var rect);
+            int w = rect.Width;
+            int h = rect.Height;
+            if (w <= 0 || h <= 0) return null;
+
+            IntPtr screenDC = IntPtr.Zero;
+            IntPtr memDC = IntPtr.Zero;
+            IntPtr bmp = IntPtr.Zero;
+            IntPtr oldBmp = IntPtr.Zero;
+
+            try
+            {
+                screenDC = GetDC(IntPtr.Zero);
+                memDC = CreateCompatibleDC(screenDC);
+                bmp = CreateCompatibleBitmap(screenDC, w, h);
+                oldBmp = SelectObject(memDC, bmp);
+
+                // PrintWindow — 윈도우 자체에 그려진 내용 캡처 (가려져도 OK)
+                if (!PrintWindow(hwnd, memDC, PW_RENDERFULLCONTENT))
+                {
+                    Debug.LogWarning("[OSScreenCapture] PrintWindow 실패 — BitBlt fallback");
+                    BitBlt(memDC, 0, 0, w, h, screenDC, rect.left, rect.top, SRCCOPY);
+                }
+
+                // 픽셀 추출
+                var bi = new BITMAPINFO();
+                bi.bmiHeader.biSize = Marshal.SizeOf<BITMAPINFOHEADER>();
+                bi.bmiHeader.biWidth = w;
+                bi.bmiHeader.biHeight = -h;
+                bi.bmiHeader.biPlanes = 1;
+                bi.bmiHeader.biBitCount = 32;
+                bi.bmiHeader.biCompression = BI_RGB;
+
+                var buf = new byte[w * h * 4];
+                GetDIBits(memDC, bmp, 0, h, buf, ref bi, DIB_RGB_COLORS);
+
+                // BGRA → RGBA + 상하 반전
+                var rgba = new byte[buf.Length];
+                for (int row = 0; row < h; row++)
+                {
+                    int srcRow = row * w * 4;
+                    int dstRow = (h - 1 - row) * w * 4;
+                    for (int col = 0; col < w; col++)
+                    {
+                        int s = srcRow + col * 4;
+                        int d = dstRow + col * 4;
+                        rgba[d + 0] = buf[s + 2];
+                        rgba[d + 1] = buf[s + 1];
+                        rgba[d + 2] = buf[s + 0];
+                        rgba[d + 3] = 255;
+                    }
+                }
+
+                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                tex.LoadRawTextureData(rgba);
+                tex.Apply();
+                return tex;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[OSScreenCapture] CaptureWindowPrint 예외: {e.Message}");
+                return null;
+            }
+            finally
+            {
+                if (oldBmp != IntPtr.Zero) SelectObject(memDC, oldBmp);
+                if (bmp != IntPtr.Zero) DeleteObject(bmp);
+                if (memDC != IntPtr.Zero) DeleteDC(memDC);
+                if (screenDC != IntPtr.Zero) ReleaseDC(IntPtr.Zero, screenDC);
+            }
         }
 
         /// <summary>

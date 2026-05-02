@@ -1,7 +1,7 @@
 {
   "name": "com.llcrowe.uitoolkitcapturemodule-mcp",
   "displayName": "UI Toolkit Capture Module (MCP)",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "unity": "6000.3",
   "description": "UI Toolkit panel/EditorWindow capture module for AI/MCP workflow. EditMode 작동 (UnityMCP 기본 render_ui 한계 보완) + PlayMode + EditorWindow rootVisualElement 캡처 지원. Claude MCP execute_code로 호출.",
   "keywords": ["ui-toolkit", "uxml", "capture", "screenshot", "mcp", "ai", "unity-mcp", "editor-window"],

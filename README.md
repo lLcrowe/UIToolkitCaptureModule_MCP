@@ -77,7 +77,8 @@ Runtime 패턴 + 추가:
 |------|:--------:|:----------------:|
 | PlayMode 캡처 | ✅ (2번 호출) | ✅ (1번 호출) |
 | EditMode 캡처 | ❌ blank | ✅ **0.2.0 작동** (RuntimePanel.Render reflection) |
-| EditorWindow 캡처 | ❌ | ⏸ 0.3.0 후속 |
+| Unity Editor 메인 캡처 | ❌ | ✅ **0.4.0 작동** (PrintWindow + EnumWindows) |
+| 단일 EditorWindow crop | ❌ | ⏸ 0.5.0 후속 |
 | 호출 방식 | MCP tool | Runtime API (`execute_code`) 또는 MenuItem (`execute_menu_item`) |
 | UnityMCP 의존 | 필수 | 독립 (MCP 서버 fork 부담 0) |
 

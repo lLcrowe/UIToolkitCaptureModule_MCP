@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0] - 2026-05-02 ⭐ Unity Editor 메인 캡처 작동
+
+### Added
+- **PrintWindow API** + **EnumWindows + 클래스명 매칭** — Unity Editor 메인 ContainerWindow HWND 정확 식별
+- `OSScreenCapture.FindUnityEditorWindow()` — 현재 프로세스 내 _Unity_ 클래스명 가시 윈도우 중 가장 큰 영역 반환
+- `OSScreenCapture.CaptureWindowPrint(hwnd)` — PrintWindow PW_RENDERFULLCONTENT, BitBlt fallback
+- `Tools > UI Toolkit Capture > Capture Unity Editor Main (PrintWindow)` MenuItem
+
+### Verified
+- Unity 6.3.12 검증: Unity Editor 통째 캡처 정상 (Game view + Scene view + Hierarchy + Inspector + 콘솔 등 전부)
+- 0.3.0의 _다른 윈도우 겹침_ 문제 해결 — PrintWindow는 _윈도우 자체 내용_ 캡처라 다른 앱 무시
+- `m_WindowPtr` reflection은 OS HWND 아님 확인 → `EnumWindows`로 우회 정착
+
+### Known Limitations (0.4.0 잔존)
+- **단일 EditorWindow 영역 crop 미구현** — Unity 메인 통째 캡처만. SceneView/Inspector 단독 영역 추출은 0.5.0 후속 (`window.position`은 절대 좌표지만 PrintWindow 결과는 ContainerWindow 좌상단 (0,0) 기준이라 변환 필요)
+- 다중 ContainerWindow (floating EditorWindow) 환경에서 _가장 큰 영역_만 반환 — 특정 floating 윈도우 캡처는 추후
+- Windows 전용 — macOS/Linux는 별도 분기 필요
+
 ## [0.3.0] - 2026-05-02 (실험적, 좌표 보정 미완료)
 
 ### Added
