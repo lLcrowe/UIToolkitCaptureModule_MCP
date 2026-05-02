@@ -65,9 +65,10 @@ Runtime 패턴 + 추가:
 - **Capture Selected UIDocument (Runtime PlayMode)** — Play 진입 후 호출
 - **Capture EditorWindow (실험)** — SceneView 캡처 시도 (0.1.0 미작동)
 
-## 한계 (0.2.0 잔존)
+## 한계 (0.5.0 잔존)
 
-- **EditorWindow 캡처 미구현** — EditorWindow 자체 panel은 internal IPanel 접근 별도 경로 필요. 0.3.0 후속
+- **다중 ContainerWindow** — floating EditorWindow는 `FindUnityEditorWindow`가 가장 큰 영역만 반환. 별도 floating 윈도우 캡처는 후속
+- **Windows 전용** — P/Invoke gdi32/user32 의존. macOS/Linux는 별도 분기 필요
 - **Active Scene 단일 탐색** — Loaded scene 다중 시 정확한 GO 식별 위해 Hierarchy 전체 경로 입력 옵션 필요 (후속)
 - **internal API 의존** — `RuntimePanel.Update/UpdateForRepaint/Render` 메서드 시그니처가 Unity 6.3.12 기준. 버전 업그레이드 시 Probe로 재검증 필요
 
@@ -78,7 +79,7 @@ Runtime 패턴 + 추가:
 | PlayMode 캡처 | ✅ (2번 호출) | ✅ (1번 호출) |
 | EditMode 캡처 | ❌ blank | ✅ **0.2.0 작동** (RuntimePanel.Render reflection) |
 | Unity Editor 메인 캡처 | ❌ | ✅ **0.4.0 작동** (PrintWindow + EnumWindows) |
-| 단일 EditorWindow crop | ❌ | ⏸ 0.5.0 후속 |
+| 단일 EditorWindow crop | ❌ | ✅ **0.5.0 작동** (PrintWindow → 상대 좌표 crop) |
 | 호출 방식 | MCP tool | Runtime API (`execute_code`) 또는 MenuItem (`execute_menu_item`) |
 | UnityMCP 의존 | 필수 | 독립 (MCP 서버 fork 부담 0) |
 

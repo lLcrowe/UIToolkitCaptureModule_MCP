@@ -157,6 +157,44 @@ namespace lLCroweTool.UIToolkitCapture.Editor
         }
 
         /// <summary>
+        /// 0.5.0 — Unity Editor 메인 ContainerWindow 절대 데스크톱 좌표 영역.
+        /// FindUnityEditorWindow + GetWindowRect 합산.
+        /// </summary>
+        public static RECT FindAndGetUnityEditorRect()
+        {
+            var hwnd = FindUnityEditorWindow();
+            if (hwnd == IntPtr.Zero) return default;
+            GetWindowRect(hwnd, out var rect);
+            return rect;
+        }
+
+        /// <summary>
+        /// 0.5.0 — Texture2D crop. EditorWindow 영역만 추출용.
+        /// 입력 좌표는 _top-down_ (좌상단 0,0). Unity Texture2D는 bottom-up이라 내부 변환.
+        /// 호출자가 DestroyImmediate 책임.
+        /// </summary>
+        public static Texture2D CropTexture(Texture2D source, int xTopDown, int yTopDown, int w, int h)
+        {
+            if (source == null || w <= 0 || h <= 0) return null;
+
+            // 경계 clamp — 음수 좌표 또는 영역 초과 보정
+            xTopDown = Mathf.Clamp(xTopDown, 0, source.width);
+            yTopDown = Mathf.Clamp(yTopDown, 0, source.height);
+            w = Mathf.Min(w, source.width - xTopDown);
+            h = Mathf.Min(h, source.height - yTopDown);
+            if (w <= 0 || h <= 0) return null;
+
+            // top-down → Unity bottom-up 변환
+            int yUnity = source.height - yTopDown - h;
+
+            var pixels = source.GetPixels(xTopDown, yUnity, w, h);
+            var cropped = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            cropped.SetPixels(pixels);
+            cropped.Apply();
+            return cropped;
+        }
+
+        /// <summary>
         /// 0.4.0 — PrintWindow API로 윈도우 자체 내용 캡처. BitBlt와 달리 _가려진 윈도우_도 캡처 가능.
         /// hwnd가 가리키는 윈도우 영역을 PNG로 저장.
         /// 단 Unity 6.3 EditorWindow는 child window라 자기 HWND 없을 수 있음 — 메인 ContainerWindow 캡처 후 crop 권장.

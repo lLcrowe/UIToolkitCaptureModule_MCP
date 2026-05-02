@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0] - 2026-05-03 ⭐⭐ 단일 EditorWindow 영역 crop 작동
+
+### Added
+- **단일 EditorWindow 영역 crop** — Unity 메인 통째 PrintWindow → ContainerWindow 안 상대 좌표 → crop
+- `OSScreenCapture.FindAndGetUnityEditorRect()` — Unity 메인 절대 데스크톱 좌표 영역 한 번에
+- `OSScreenCapture.CropTexture(source, xTopDown, yTopDown, w, h)` — top-down 좌표 입력 + Unity bottom-up 변환
+
+### Changed
+- `UIToolkitCaptureEditor.CaptureEditorWindow` 파이프라인 전면 교체:
+  - Before (0.4.0): BitBlt 직접 (다른 윈도우 겹침 시 잘못 캡처)
+  - After (0.5.0): PrintWindow 통째 → 상대 좌표 crop (가려져도 정확한 EditorWindow 영역 추출)
+
+### Verified
+- SceneView 단독 캡처 — Scene 탭, toolbar, Player Sphere, Frame gizmo 정확
+- Inspector 단독 캡처 — UIDocumentTest의 Transform·UIDocument 컴포넌트·한글 _메모리보기_ 모두 정확
+
+### 좌표 변환 정합
+- `EditorWindow.position` (절대 데스크톱 좌표, top-down)
+- `ContainerWindow.GetWindowRect.left/top` (절대 데스크톱 좌표, top-down)
+- 상대 좌표 = `window.position - container.left/top` (ContainerWindow 안, top-down)
+- `CropTexture`에서 top-down → Unity bottom-up 자동 변환
+
+### Known Limitations (0.5.0 잔존)
+- 다중 ContainerWindow (floating EditorWindow) — `FindUnityEditorWindow`가 _가장 큰 영역_만 반환. floating 윈도우 캡처는 별도 분기 필요
+- Windows 전용 — macOS/Linux는 별도 P/Invoke 분기 필요
+
 ## [0.4.0] - 2026-05-02 ⭐ Unity Editor 메인 캡처 작동
 
 ### Added

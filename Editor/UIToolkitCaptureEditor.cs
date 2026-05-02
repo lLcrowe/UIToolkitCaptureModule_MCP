@@ -123,41 +123,42 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             window.Repaint();
             EditorApplication.QueuePlayerLoopUpdate();
 
-            // 4) ContainerWindow 절대 좌표 + EditorWindow 상대 좌표 = 절대 데스크톱 좌표.
-            //    EditorWindow.m_Parent.window.m_WindowPtr reflection으로 정확한 OS HWND 추출.
-            //    (UnityCsReference ContainerWindow.cs 참조 — UnityCsReference master 검증)
-            var containerRect = OSScreenCapture.GetEditorWindowRect(window);
-            int containerX = containerRect.left;
-            int containerY = containerRect.top;
+            // 0.5.0 — Unity 메인 ContainerWindow PrintWindow 통째 캡처 + EditorWindow 영역 crop.
+            //   1) FindUnityEditorWindow → Unity 메인 HWND
+            //   2) PrintWindow → 통째 Texture (border 포함, ContainerWindow 좌상단 (0,0) 기준)
+            //   3) window.position(절대 데스크톱 좌표) - ContainerWindow.GetWindowRect.left/top(절대) = ContainerWindow 안 상대 좌표
+            //   4) crop → 단독 EditorWindow PNG
 
+            var unityHwnd = OSScreenCapture.FindUnityEditorWindow();
+            if (unityHwnd == IntPtr.Zero) return CaptureResult.Fail("Unity Editor 메인 ContainerWindow HWND 미발견");
+
+            var containerRect = OSScreenCapture.FindAndGetUnityEditorRect();
             var pos = window.position;
-            int x = containerX + Mathf.RoundToInt(pos.x);
-            int y = containerY + Mathf.RoundToInt(pos.y);
+
+            // ContainerWindow 안 상대 좌표 (PrintWindow 결과 텍스처에서 crop 위치)
+            int relX = Mathf.RoundToInt(pos.x) - containerRect.left;
+            int relY = Mathf.RoundToInt(pos.y) - containerRect.top;
             int w = Mathf.RoundToInt(pos.width);
             int h = Mathf.RoundToInt(pos.height);
 
-            // ContainerWindow HWND 추출 실패 시 (reflection chain 깨짐) — window.position 그대로 fallback
-            if (containerX == 0 && containerY == 0 && containerRect.right == 0 && containerRect.bottom == 0)
-            {
-                Debug.LogWarning("[UIToolkitCaptureEditor] ContainerWindow HWND reflection 실패 — window.position fallback (좌표 부정확 가능)");
-                x = Mathf.RoundToInt(pos.x);
-                y = Mathf.RoundToInt(pos.y);
-            }
-
             if (w <= 0 || h <= 0) return CaptureResult.Fail($"Invalid window size: {w}x{h}");
 
-            // 5) OS 스크린 캡처 (P/Invoke BitBlt)
-            Texture2D tex = null;
+            // 5) PrintWindow 통째 캡처 + crop
+            Texture2D fullTex = null;
+            Texture2D croppedTex = null;
             try
             {
-                tex = OSScreenCapture.CaptureScreenRegion(x, y, w, h);
-                if (tex == null) return CaptureResult.Fail("OSScreenCapture returned null (Windows P/Invoke 실패)");
+                fullTex = OSScreenCapture.CaptureWindowPrint(unityHwnd);
+                if (fullTex == null) return CaptureResult.Fail("PrintWindow Unity 메인 캡처 실패");
+
+                croppedTex = OSScreenCapture.CropTexture(fullTex, relX, relY, w, h);
+                if (croppedTex == null) return CaptureResult.Fail($"Crop 실패 — relX={relX}, relY={relY}, w={w}, h={h}, fullTex={fullTex.width}x{fullTex.height}");
 
                 EnsureDirectory(outputPath);
-                File.WriteAllBytes(outputPath, tex.EncodeToPNG());
+                File.WriteAllBytes(outputPath, croppedTex.EncodeToPNG());
 
                 AssetDatabase.Refresh();
-                return CaptureResult.Ok(outputPath, w, h);
+                return CaptureResult.Ok(outputPath, croppedTex.width, croppedTex.height);
             }
             catch (Exception e)
             {
@@ -165,7 +166,8 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             }
             finally
             {
-                if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
+                if (croppedTex != null) UnityEngine.Object.DestroyImmediate(croppedTex);
+                if (fullTex != null) UnityEngine.Object.DestroyImmediate(fullTex);
             }
         }
 
