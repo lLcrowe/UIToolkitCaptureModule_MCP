@@ -51,18 +51,19 @@ namespace lLCroweTool.UIToolkitCapture.Editor
                 // 1) panel dirty 마킹
                 rootElement?.MarkDirtyRepaint();
 
-                // 2) EditMode frame loop 강제 — Editor에서 1 frame 트리거.
-                //    PlayMode 진입 안 해도 panel 빌드되도록.
-                EditorApplication.QueuePlayerLoopUpdate();
+                // 2) ⭐ 0.2.0 핵심 — RuntimePanel.Update() + UpdateForRepaint() + Render() reflection 직접 호출.
+                //    0.1.0의 UpdatePanels() reflection은 효과 없었음 (검정 화면).
+                //    Probe 결과로 확인된 RuntimePanel 메서드 (UnityEngine.UIElementsModule):
+                //    - Update() : 모든 단계 통합 (ValidateLayout/ApplyStyles/UpdateBindings 등)
+                //    - UpdateForRepaint() : Repaint 직전 단계
+                //    - Render() : RT에 직접 그리기
+                ForceRenderPanel(rootElement?.panel);
 
-                // 3) internal API UpdatePanels — reflection 호출 (Runtime의 ForceUpdatePanels와 동일)
-                ForceUpdatePanels();
-
-                // 4) Editor scene view 강제 repaint — 보조
+                // 3) Editor scene view 강제 repaint — 보조 (HUD overlay 등 갱신용)
                 SceneView.RepaintAll();
                 EditorApplication.QueuePlayerLoopUpdate();
 
-                // 5) RT → Texture2D
+                // 4) RT → Texture2D
                 var prevActive = RenderTexture.active;
                 RenderTexture.active = rt;
 
@@ -142,6 +143,41 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             }
         }
 
+        /// <summary>
+        /// 0.2.0 핵심 — RuntimePanel.Update() + UpdateForRepaint() + Render() reflection 직접 호출.
+        /// EditMode에서 frame loop 없어도 panel을 강제 렌더 사이클 통과시킴.
+        /// Probe 결과(`Tools/UI Toolkit Capture/Probe/Enum Panel Methods`)로 확인된 메서드 시그니처 의존.
+        /// </summary>
+        private static void ForceRenderPanel(IPanel panel)
+        {
+            if (panel == null) return;
+            try
+            {
+                var t = panel.GetType();
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+                // 1) Update — 모든 단계 통합 (ValidateLayout/ApplyStyles/UpdateBindings 등 자동 진행)
+                var updateMethod = t.GetMethod("Update", flags, null, System.Type.EmptyTypes, null);
+                updateMethod?.Invoke(panel, null);
+
+                // 2) UpdateForRepaint — Repaint 직전 단계 (visualTreeUpdater에 Repaint 의존성 채움)
+                var updateRepaintMethod = t.GetMethod("UpdateForRepaint", flags, null, System.Type.EmptyTypes, null);
+                updateRepaintMethod?.Invoke(panel, null);
+
+                // 3) Render — RT에 직접 그리기 (panelSettings.targetTexture 할당된 RT)
+                var renderMethod = t.GetMethod("Render", flags, null, System.Type.EmptyTypes, null);
+                renderMethod?.Invoke(panel, null);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[UIToolkitCaptureEditor] ForceRenderPanel reflection 실패: {e.InnerException?.Message ?? e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 0.1.0 폴백 (UpdatePanels 호출). 0.2.0에서 ForceRenderPanel 사용으로 대체됨.
+        /// 호환성 위해 EditorWindow 메서드에서만 사용.
+        /// </summary>
         private static void ForceUpdatePanels()
         {
             try

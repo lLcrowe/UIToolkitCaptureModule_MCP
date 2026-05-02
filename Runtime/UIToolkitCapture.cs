@@ -56,9 +56,10 @@ namespace lLCroweTool.UIToolkitCapture
                 // 4. panel dirty 마킹 — Repaint 트리거
                 rootElement?.MarkDirtyRepaint();
 
-                // 5. UIElementsRuntimeUtility.UpdatePanels() reflection 호출 (internal API).
-                //    PlayMode/EditMode 둘 다에서 panel을 강제 update — 함정 #UI-1 회피용.
-                ForceUpdatePanels();
+                // 5. ⭐ 0.2.0 핵심 — RuntimePanel.Update() + UpdateForRepaint() + Render() reflection 직접 호출.
+                //    EditMode/PlayMode 둘 다에서 panel을 _강제 렌더 사이클_ 통과시킴.
+                //    Probe(`Tools/UI Toolkit Capture/Probe/Enum Panel Methods`)로 확인된 internal API.
+                ForceRenderPanel(rootElement?.panel);
 
                 // 6. RT → Texture2D
                 var prevActive = RenderTexture.active;
@@ -91,25 +92,34 @@ namespace lLCroweTool.UIToolkitCapture
         }
 
         /// <summary>
-        /// UIElementsRuntimeUtility.UpdatePanels() reflection 호출.
-        /// internal API라 Unity 버전 변경 시 깨질 수 있음. 깨지면 ForceRepaintFallback 분기.
+        /// 0.2.0 핵심 — RuntimePanel.Update() + UpdateForRepaint() + Render() reflection 직접 호출.
+        /// EditMode/PlayMode 둘 다에서 panel을 강제 렌더 사이클 통과시킴.
+        /// Probe(`Tools/UI Toolkit Capture/Probe/Enum Panel Methods`)로 확인된 internal API.
+        /// 0.1.0의 UIElementsRuntimeUtility.UpdatePanels은 효과 없어서 폐기.
         /// </summary>
-        private static void ForceUpdatePanels()
+        private static void ForceRenderPanel(IPanel panel)
         {
+            if (panel == null) return;
             try
             {
-                var asm = typeof(UIDocument).Assembly;
-                var utilType = asm.GetType("UnityEngine.UIElements.UIElementsRuntimeUtility");
-                if (utilType == null) return;
+                var t = panel.GetType();
+                var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
 
-                var method = utilType.GetMethod(
-                    "UpdatePanels",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                method?.Invoke(null, null);
+                // 1) Update — 모든 단계 통합 (ValidateLayout/ApplyStyles/UpdateBindings 등)
+                var updateMethod = t.GetMethod("Update", flags, null, System.Type.EmptyTypes, null);
+                updateMethod?.Invoke(panel, null);
+
+                // 2) UpdateForRepaint — Repaint 직전 단계 (visualTreeUpdater에 Repaint 의존성 채움)
+                var updateRepaintMethod = t.GetMethod("UpdateForRepaint", flags, null, System.Type.EmptyTypes, null);
+                updateRepaintMethod?.Invoke(panel, null);
+
+                // 3) Render — RT에 직접 그리기 (panelSettings.targetTexture 할당된 RT)
+                var renderMethod = t.GetMethod("Render", flags, null, System.Type.EmptyTypes, null);
+                renderMethod?.Invoke(panel, null);
             }
             catch
             {
-                // reflection 실패 — Unity 버전 변경. 무시 (RT 할당만으로 PlayMode는 동작)
+                // reflection 실패 — Unity 버전 변경. 무시 (RT 할당만으로 PlayMode는 그래도 동작)
             }
         }
 

@@ -65,20 +65,20 @@ Runtime 패턴 + 추가:
 - **Capture Selected UIDocument (Runtime PlayMode)** — Play 진입 후 호출
 - **Capture EditorWindow (실험)** — SceneView 캡처 시도 (0.1.0 미작동)
 
-## 한계 (0.1.0)
+## 한계 (0.2.0 잔존)
 
-- **EditMode 캡처 실험적** — `UpdatePanels` internal API reflection. Unity 6.3.x 검증 필요. 작동 안 하면 PlayMode 사용 권장
-- **EditorWindow 캡처 미구현** — Panel internal API 접근 정착 후 보강. 현재는 OS-level 도구 권장
+- **EditorWindow 캡처 미구현** — EditorWindow 자체 panel은 internal IPanel 접근 별도 경로 필요. 0.3.0 후속
 - **Active Scene 단일 탐색** — Loaded scene 다중 시 정확한 GO 식별 위해 Hierarchy 전체 경로 입력 옵션 필요 (후속)
+- **internal API 의존** — `RuntimePanel.Update/UpdateForRepaint/Render` 메서드 시그니처가 Unity 6.3.12 기준. 버전 업그레이드 시 Probe로 재검증 필요
 
 ## 차별점 (vs UnityMCP manage_ui render_ui)
 
 | 영역 | manage_ui | UIToolkitCapture |
 |------|:--------:|:----------------:|
 | PlayMode 캡처 | ✅ (2번 호출) | ✅ (1번 호출) |
-| EditMode 캡처 | ❌ blank | 🟡 실험 (UpdatePanels reflection) |
-| EditorWindow 캡처 | ❌ | ⏸ 0.1.0 미구현, 후속 |
-| 호출 방식 | MCP tool | Runtime API (`execute_code`) |
+| EditMode 캡처 | ❌ blank | ✅ **0.2.0 작동** (RuntimePanel.Render reflection) |
+| EditorWindow 캡처 | ❌ | ⏸ 0.3.0 후속 |
+| 호출 방식 | MCP tool | Runtime API (`execute_code`) 또는 MenuItem (`execute_menu_item`) |
 | UnityMCP 의존 | 필수 | 독립 (MCP 서버 fork 부담 0) |
 
 ## 후속 (0.2.0 후보)
