@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0] - 2026-05-02 (실험적, 좌표 보정 미완료)
+
+### Added
+- **EditorWindow OS-level 캡처 시도** — P/Invoke BitBlt (gdi32) + ContainerWindow HWND reflection chain
+- `OSScreenCapture` Editor 클래스 — `CaptureScreenRegion(x, y, w, h)` + `GetEditorWindowHWND` + `GetEditorWindowRect`
+- `Tools > UI Toolkit Capture > Capture EditorWindow (SceneView)` MenuItem
+- `Tools > UI Toolkit Capture > Capture EditorWindow (Inspector)` MenuItem
+- `Tools > UI Toolkit Capture > Probe > Coords (SceneView + Inspector)` 진단 메뉴
+- `Tools > UI Toolkit Capture > Probe > Enum EditorWindow Panel (SceneView)` 진단 메뉴
+- EditorPanel API 연구 결과 (Render/UpdateForRepaint/UpdateAnimations 메서드 확인 — 단 RT 할당 경로 없음)
+
+### Verified
+- BitBlt 자체는 작동 (PNG 정상 생성, RGB 변환 정합)
+- `EditorWindow.position`은 절대 데스크톱 좌표 (Inspector (1517, 87) 검증)
+- `EditorWindow.m_Parent` = DockArea / `DockArea.window` reflection 가능
+
+### Known Limitations (0.3.0)
+- ⚠️ **좌표 위에 다른 윈도우 겹칠 시 잘못된 영역 캡처** — BitBlt는 _스크린에 보이는 것_ 캡처. 다른 게임/앱이 그 좌표 위에 있으면 그쪽 캡처
+- ⚠️ **`m_WindowPtr` reflection이 OS HWND 아님** — Unity 내부 native pointer 반환 (값 너무 큼, GetWindowRect 결과 0,0,0,0)
+- 0.4.0 후속: `PrintWindow` API + Unity 메인 ContainerWindow `FindWindow` 클래스명 매칭
+
 ## [0.2.0] - 2026-05-02
 
 ### Added

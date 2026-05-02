@@ -94,11 +94,13 @@ namespace lLCroweTool.UIToolkitCapture.Editor
         }
 
         /// <summary>
-        /// EditorWindow의 rootVisualElement를 캡처. 임시 RenderTexture 할당 패턴.
-        /// 실험 0.1.0 — Unity 6.3에서 EditorWindow panel 캡처 작동 여부 검증 필요.
+        /// EditorWindow의 가시 영역을 OS-level BitBlt로 캡처해 PNG 저장.
+        /// 0.3.0 — EditorPanel은 RT 할당 경로 없어서 OS 화면 캡처 + crop 패턴 채택.
+        /// Windows 전용 (P/Invoke user32/gdi32). 다른 플랫폼은 추후 분기.
         /// </summary>
         /// <param name="editorWindowTypeName">예: "UnityEditor.SceneView" 또는 "MyTool.IAMEditorWindow"</param>
-        public static CaptureResult CaptureEditorWindow(string editorWindowTypeName, int width, int height, string outputPath)
+        /// <param name="outputPath">PNG 저장 경로</param>
+        public static CaptureResult CaptureEditorWindow(string editorWindowTypeName, string outputPath)
         {
             if (string.IsNullOrEmpty(editorWindowTypeName)) return CaptureResult.Fail("editorWindowTypeName empty");
 
@@ -116,30 +118,54 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             var window = EditorWindow.GetWindow(targetType) as EditorWindow;
             if (window == null) return CaptureResult.Fail("Failed to GetWindow");
 
+            // 3) 강제 Repaint — UI 갱신
+            window.Focus();
+            window.Repaint();
+            EditorApplication.QueuePlayerLoopUpdate();
+
+            // 4) ContainerWindow 절대 좌표 + EditorWindow 상대 좌표 = 절대 데스크톱 좌표.
+            //    EditorWindow.m_Parent.window.m_WindowPtr reflection으로 정확한 OS HWND 추출.
+            //    (UnityCsReference ContainerWindow.cs 참조 — UnityCsReference master 검증)
+            var containerRect = OSScreenCapture.GetEditorWindowRect(window);
+            int containerX = containerRect.left;
+            int containerY = containerRect.top;
+
+            var pos = window.position;
+            int x = containerX + Mathf.RoundToInt(pos.x);
+            int y = containerY + Mathf.RoundToInt(pos.y);
+            int w = Mathf.RoundToInt(pos.width);
+            int h = Mathf.RoundToInt(pos.height);
+
+            // ContainerWindow HWND 추출 실패 시 (reflection chain 깨짐) — window.position 그대로 fallback
+            if (containerX == 0 && containerY == 0 && containerRect.right == 0 && containerRect.bottom == 0)
+            {
+                Debug.LogWarning("[UIToolkitCaptureEditor] ContainerWindow HWND reflection 실패 — window.position fallback (좌표 부정확 가능)");
+                x = Mathf.RoundToInt(pos.x);
+                y = Mathf.RoundToInt(pos.y);
+            }
+
+            if (w <= 0 || h <= 0) return CaptureResult.Fail($"Invalid window size: {w}x{h}");
+
+            // 5) OS 스크린 캡처 (P/Invoke BitBlt)
+            Texture2D tex = null;
             try
             {
-                window.minSize = new Vector2(width, height);
-                window.maxSize = new Vector2(width, height);
-                window.Repaint();
+                tex = OSScreenCapture.CaptureScreenRegion(x, y, w, h);
+                if (tex == null) return CaptureResult.Fail("OSScreenCapture returned null (Windows P/Invoke 실패)");
 
-                // EditorWindow.rootVisualElement.panel을 캡처는 internal API 의존 영역.
-                // 0.1.0에서는 _OS-level 캡처_ 대신 _Game view 패턴_ 시도.
-                // window의 PanelSettings 추출 시도 (private field reflection)
-                var panel = window.rootVisualElement?.panel;
-                if (panel == null) return CaptureResult.Fail("EditorWindow panel null");
+                EnsureDirectory(outputPath);
+                File.WriteAllBytes(outputPath, tex.EncodeToPNG());
 
-                // EditorWindow의 panel은 internal Panel — render to RT가 internal API 의존.
-                // 시도: panel.SendForceRedraw() reflection
-                ForceUpdatePanels();
-                window.Repaint();
-                EditorApplication.QueuePlayerLoopUpdate();
-
-                // 임시 응답 — 실측 후 internal API 정착 시 본 메서드 보강
-                return CaptureResult.Fail("EditorWindow capture not yet implemented in 0.1.0 — internal Panel API access pending. Use Unity 'Window > Capture' or external tool for now.");
+                AssetDatabase.Refresh();
+                return CaptureResult.Ok(outputPath, w, h);
             }
             catch (Exception e)
             {
                 return CaptureResult.Fail($"EditorWindow capture exception: {e.Message}");
+            }
+            finally
+            {
+                if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
             }
         }
 

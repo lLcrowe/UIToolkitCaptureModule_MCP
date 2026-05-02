@@ -55,13 +55,21 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             LogResult(result, "Test_EditMode");
         }
 
-        [MenuItem("Tools/UI Toolkit Capture/Capture EditorWindow (실험)")]
-        public static void CaptureEditorWindowMenu()
+        [MenuItem("Tools/UI Toolkit Capture/Capture EditorWindow (SceneView)")]
+        public static void CaptureSceneViewMenu()
         {
-            // 예제 — SceneView 캡처 시도
+            // 0.3.0 — SceneView OS-level 캡처
             var path = $"{OUTPUT_DIR}/EditorWindow_SceneView_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
-            var result = UIToolkitCaptureEditor.CaptureEditorWindow("UnityEditor.SceneView", 1280, 720, path);
+            var result = UIToolkitCaptureEditor.CaptureEditorWindow("UnityEditor.SceneView", path);
             LogResult(result, "EditorWindow(SceneView)");
+        }
+
+        [MenuItem("Tools/UI Toolkit Capture/Capture EditorWindow (Inspector)")]
+        public static void CaptureInspectorMenu()
+        {
+            var path = $"{OUTPUT_DIR}/EditorWindow_Inspector_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
+            var result = UIToolkitCaptureEditor.CaptureEditorWindow("UnityEditor.InspectorWindow", path);
+            LogResult(result, "EditorWindow(Inspector)");
         }
 
         private static void LogResult(CaptureResult result, string mode)

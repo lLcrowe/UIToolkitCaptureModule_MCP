@@ -83,6 +83,125 @@ namespace lLCroweTool.UIToolkitCapture.Editor
             WriteAndLog($"panel_methods_{DateTime.Now:yyyyMMdd_HHmmss}.txt", sb.ToString());
         }
 
+        [MenuItem("Tools/UI Toolkit Capture/Probe/Enum EditorWindow Panel (SceneView)")]
+        public static void ProbeEditorWindowPanel()
+        {
+            var window = EditorWindow.GetWindow<SceneView>();
+            if (window == null) { Debug.LogError("[Probe] SceneView not found"); return; }
+
+            var root = window.rootVisualElement;
+            var panel = root?.panel;
+            if (panel == null) { Debug.LogError("[Probe] EditorWindow panel null"); return; }
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"=== EditorWindow Panel Probe ===");
+            sb.AppendLine($"Window type: {window.GetType().FullName}");
+            sb.AppendLine($"Window position: {window.position}");
+            sb.AppendLine($"Panel type: {panel.GetType().FullName}");
+            sb.AppendLine($"Panel base: {panel.GetType().BaseType?.FullName}");
+            sb.AppendLine($"Panel assembly: {panel.GetType().Assembly.GetName().Name}");
+            sb.AppendLine();
+            sb.AppendLine("--- Methods (Public + NonPublic Instance) ---");
+
+            var methods = panel.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (var m in methods)
+            {
+                if (m.GetParameters().Length > 1) continue;
+                var paramStr = m.GetParameters().Length == 0 ? "" : m.GetParameters()[0].ParameterType.Name;
+                sb.AppendLine($"  {m.ReturnType.Name} {m.Name}({paramStr})");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("--- Properties (Public + NonPublic Instance) ---");
+            var props = panel.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                sb.AppendLine($"  {p.PropertyType.Name} {p.Name}");
+            }
+
+            WriteAndLog($"editorwindow_panel_methods_{DateTime.Now:yyyyMMdd_HHmmss}.txt", sb.ToString());
+        }
+
+        [MenuItem("Tools/UI Toolkit Capture/Probe/Coords (SceneView + Inspector)")]
+        public static void ProbeCoords()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"=== Coords Probe ===");
+            sb.AppendLine($"DateTime: {DateTime.Now}");
+            sb.AppendLine();
+
+            ProbeWindowCoords(sb, "SceneView", typeof(SceneView));
+            sb.AppendLine();
+
+            try
+            {
+                var inspectorType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.InspectorWindow");
+                if (inspectorType != null) ProbeWindowCoords(sb, "InspectorWindow", inspectorType);
+            }
+            catch (Exception e) { sb.AppendLine($"Inspector probe failed: {e.Message}"); }
+
+            sb.AppendLine();
+            sb.AppendLine("=== Process Info ===");
+            try
+            {
+                var proc = System.Diagnostics.Process.GetCurrentProcess();
+                sb.AppendLine($"Process MainWindowHandle: {proc.MainWindowHandle}");
+                sb.AppendLine($"Process MainWindowTitle: {proc.MainWindowTitle}");
+            }
+            catch (Exception e) { sb.AppendLine($"Process info failed: {e.Message}"); }
+
+            WriteAndLog($"coords_{DateTime.Now:yyyyMMdd_HHmmss}.txt", sb.ToString());
+        }
+
+        private static void ProbeWindowCoords(StringBuilder sb, string label, Type windowType)
+        {
+            try
+            {
+                var window = EditorWindow.GetWindow(windowType) as EditorWindow;
+                if (window == null) { sb.AppendLine($"--- {label}: GetWindow null"); return; }
+
+                var hwnd = OSScreenCapture.GetEditorWindowHWND(window);
+                var rect = OSScreenCapture.GetEditorWindowRect(window);
+
+                sb.AppendLine($"--- {label} ({windowType.FullName}) ---");
+                sb.AppendLine($"  window.position: {window.position}");
+                sb.AppendLine($"  HWND (reflection): {hwnd}");
+                sb.AppendLine($"  GetWindowRect: ({rect.left}, {rect.top}) - ({rect.right}, {rect.bottom}) = {rect.Width}x{rect.Height}");
+                sb.AppendLine($"  Calculated abs: ({rect.left + window.position.x}, {rect.top + window.position.y}) {window.position.width}x{window.position.height}");
+
+                // m_Parent reflection 직접 확인
+                var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+                var parentField = typeof(EditorWindow).GetField("m_Parent", flags);
+                var parent = parentField?.GetValue(window);
+                if (parent != null)
+                {
+                    sb.AppendLine($"  m_Parent type: {parent.GetType().FullName}");
+                    var windowField = parent.GetType().GetField("window", flags);
+                    var container = windowField?.GetValue(parent);
+                    if (container != null)
+                    {
+                        sb.AppendLine($"  ContainerWindow type: {container.GetType().FullName}");
+                        var posField = container.GetType().GetField("m_PixelRect", flags);
+                        if (posField != null)
+                        {
+                            var pixelRect = posField.GetValue(container);
+                            sb.AppendLine($"  ContainerWindow.m_PixelRect: {pixelRect}");
+                        }
+                        var posProp = container.GetType().GetProperty("position", flags);
+                        if (posProp != null)
+                        {
+                            var pos = posProp.GetValue(container);
+                            sb.AppendLine($"  ContainerWindow.position: {pos}");
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                sb.AppendLine($"--- {label}: ERROR {e.Message}");
+            }
+        }
+
         [MenuItem("Tools/UI Toolkit Capture/Probe/Try Each Repaint Method")]
         public static void TryEachRepaint()
         {
